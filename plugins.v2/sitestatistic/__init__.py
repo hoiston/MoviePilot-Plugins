@@ -32,7 +32,7 @@ class SiteStatistic(_PluginBase):
     # 插件图标
     plugin_icon = "statistic.png"
     # 插件版本
-    plugin_version = "1.0.2"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "lightolly,jxxghp"
     # 作者主页
@@ -198,10 +198,6 @@ class SiteStatistic(_PluginBase):
         """
         获取今天的日期、今天的站点数据、昨天的站点数据
         """
-        # 最近一天的数据
-        stattistic_data: List[SiteUserData] = []
-        # 昨天数据
-        yesterday_sites_data: List[SiteUserData] = []
         # 获取最近所有数据
         data_list: List[SiteUserData] = self.siteoper.get_userdata()
         if not data_list:
@@ -210,17 +206,16 @@ class SiteStatistic(_PluginBase):
         data_list = list({f"{data.updated_day}_{data.name}": data for data in data_list}.values())
         # 按日期倒序排序
         data_list.sort(key=lambda x: x.updated_day, reverse=True)
-        # 今天的日期
-        today = time.strftime('%Y-%m-%d', time.localtime())
-        if len(data_list) > 0:
-            today = data_list[0].updated_day
-            stattistic_data = [data for data in data_list if data.updated_day == today]
-        if len(data_list) > 1:
-            yestoday = data_list[1].updated_day
-            yesterday_sites_data = [data for data in data_list if data.updated_day == yestoday]
-
+        # 获取今天的日期
+        today = data_list[0].updated_day
+        # 获取昨天的日期
+        yestoday = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        # 今天的数据
+        stattistic_data = [data for data in data_list if data.updated_day == today]
         # 今日数据按数据量降序排序
         stattistic_data.sort(key=lambda x: x.upload, reverse=True)
+        # 昨天的数据
+        yesterday_sites_data = [data for data in data_list if data.updated_day == yestoday]
 
         return today, stattistic_data, yesterday_sites_data
 
@@ -239,6 +234,18 @@ class SiteStatistic(_PluginBase):
                 return 0
             return round(float(value) / 1024 / 1024 / 1024, 1)
 
+        def __is_digit(value: any) -> bool:
+            """
+            判断是否为数字
+            """
+            if value is None:
+                return False
+            if isinstance(value, float) or isinstance(value, int):
+                return True
+            if isinstance(value, str):
+                return value.isdigit()
+            return False
+
         def __sub_data(d1: dict, d2: dict) -> dict:
             """
             计算两个字典相同Key值的差值（如果值为数字），返回新字典
@@ -247,8 +254,8 @@ class SiteStatistic(_PluginBase):
                 return {}
             if not d2:
                 return d1
-            d = {k: int(d1.get(k)) - int(d2.get(k)) for k in d1
-                 if k in d2 and str(d1.get(k)).isdigit() and str(d2.get(k)).isdigit()}
+            d = {k: d1.get(k) - d2.get(k) for k in d1
+                 if k in d2 and __is_digit(d1.get(k)) and __is_digit(d2.get(k))}
             # 把小于0的数据变成0
             for k, v in d.items():
                 if str(v).isdigit() and int(v) < 0:
@@ -559,7 +566,7 @@ class SiteStatistic(_PluginBase):
                 if inc:
                     inc_data[data.name] = inc
             # 今日上传
-            uploads = {k: v for k, v in inc_data.items() if v.get("upload")}
+            uploads = {k: v for k, v in inc_data.items() if v.get("upload") if v.get("upload") > 0}
             # 今日上传站点
             upload_sites = [site for site in uploads.keys()]
             # 今日上传数据
@@ -567,7 +574,7 @@ class SiteStatistic(_PluginBase):
             # 今日上传总量
             today_upload = round(sum(upload_datas), 2)
             # 今日下载
-            downloads = {k: v for k, v in inc_data.items() if v.get("download")}
+            downloads = {k: v for k, v in inc_data.items() if v.get("download") if v.get("download") > 0}
             # 今日下载站点
             download_sites = [site for site in downloads.keys()]
             # 今日下载数据
